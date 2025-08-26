@@ -1,0 +1,71 @@
+#!/bin/bash
+
+set -euo pipefail
+
+readonly SCRIPT_NAME="color picker"
+# 3 seconds
+readonly NOTIFICATION_TIMEOUT=3000
+
+error_exit() {
+    echo "Error: $1" >&2
+    exit 1
+}
+
+check_dependencies() {
+    local deps=("notify-send" "xclip" "gpick")
+
+    for dep in "${deps[@]}"; do
+        command -v "$dep" >/dev/null || error_exit "missing dependency: $dep"
+    done
+}
+
+pick_color() {
+    local color=""
+
+    if command -v gpick >/dev/null; then
+        echo "click to pick color..." >&2
+        color=$(gpick -pso --no-newline 2>/dev/null) || error_exit "color picking cancelled"
+    fi
+
+    echo "$color"
+}
+
+# validate and normalize hex value
+normalize_hex() {
+    local color="$1"
+
+    [[ -n "$color" ]] || error_exit "no color selected"
+
+    # add '#' prefix if missing
+    [[ "$color" =~ ^# ]] || color="#$color"
+
+    # convert to uppercase
+    echo "${color^^}"
+}
+
+copy_to_clipboard() {
+    local color="$1"
+    printf '%s' "$color" | xclip -selection clipboard
+}
+
+show_notification() {
+    local color="$1"
+    notify-send -a "$SCRIPT_NAME" "color picked" "$color was copied to clipboard" --expire-time="$NOTIFICATION_TIMEOUT"
+}
+
+main() {
+    check_dependencies
+
+    local raw_color normalized_hex
+
+    raw_color=$(pick_color)
+    normalized_hex=$(normalize_hex "$raw_color")
+
+    copy_to_clipboard "$normalized_hex"
+    show_notification "$normalized_hex"
+
+    echo "color picked: $normalized_hex"
+    echo "copied to clipboard" >&2
+}
+
+main "$@"
